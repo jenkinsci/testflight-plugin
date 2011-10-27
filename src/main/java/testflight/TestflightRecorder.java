@@ -23,6 +23,7 @@ import java.util.*;
 
 import net.sf.json.JSONObject;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.StaplerRequest;
 
 public class TestflightRecorder extends Recorder
@@ -57,6 +58,12 @@ public class TestflightRecorder extends Recorder
         return this.filePath;
     }
     
+    private String dsymPath;
+    public String getDsymPath()
+    {
+        return this.dsymPath;
+    }
+    
     private String lists;
     public String getLists()
     {
@@ -70,13 +77,14 @@ public class TestflightRecorder extends Recorder
     }
     
     @DataBoundConstructor
-    public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, String buildNotes, String filePath, String lists, Boolean replace)
+    public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace)
     {
         this.teamToken = teamToken;
         this.apiToken = apiToken;
         this.notifyTeam = notifyTeam;
         this.buildNotes = buildNotes;
         this.filePath = filePath;
+        this.dsymPath = dsymPath;
         this.replace = replace;
         this.lists = lists;
     }
@@ -109,12 +117,20 @@ public class TestflightRecorder extends Recorder
             HttpClient httpclient = new DefaultHttpClient();
             HttpPost httpPost = new HttpPost("http://testflightapp.com/api/builds.json");
             FileBody fileBody = new FileBody(file);
-
+            
             MultipartEntity entity = new MultipartEntity();
             entity.addPart("api_token", new StringBody(apiToken));
             entity.addPart("team_token", new StringBody(teamToken));
             entity.addPart("notes", new StringBody(vars.expand(buildNotes)));
             entity.addPart("file", fileBody);
+            
+            if (!StringUtils.isEmpty(dsymPath)) {
+              File dsymFile = new File(vars.expand(dsymPath));
+              listener.getLogger().println(dsymFile);
+              FileBody dsymFileBody = new FileBody(dsymFile);
+              entity.addPart("dsym", dsymFileBody);
+            }
+            
             if (lists.length() > 0)
                 entity.addPart("distribution_lists", new StringBody(lists));
             entity.addPart("notify", new StringBody(notifyTeam ? "True" : "False"));

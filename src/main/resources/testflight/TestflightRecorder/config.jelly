@@ -18,20 +18,21 @@
   <f:entry title="IPA File" field="filePath">
     <f:textbox />
   </f:entry>
+  <f:entry title="dSYM File" field="dsymPath">
+    <f:textbox />
+  </f:entry>
   <f:entry title="Build Notes" field="buildNotes">
     <f:textarea />
   </f:entry>
-  <f:section title="Optional Upload Configuration">
-      <f:advanced title="Optional">
-        <f:entry title="Distribution Lists" field="lists">
-            <f:textbox />
-        </f:entry>
-        <f:entry title="Notify Team" field="notifyTeam">
-            <f:checkbox />
-        </f:entry>
-        <f:entry title="Replace Build" field="replace">
-            <f:checkbox />
-        </f:entry>
-      </f:advanced>
-  </f:section>
+  <f:advanced>
+    <f:entry title="Distribution Lists" field="lists">
+        <f:textbox />
+    </f:entry>
+    <f:entry title="Notify Team" field="notifyTeam">
+        <f:checkbox />
+    </f:entry>
+    <f:entry title="Replace Build" field="replace">
+        <f:checkbox />
+    </f:entry>
+  </f:advanced>
 </j:jelly>
