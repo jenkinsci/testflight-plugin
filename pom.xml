@@ -10,7 +10,7 @@
   <artifactId>testflight</artifactId>
   <name>Testflight Plugin</name>
   <description>Uploads .ipa files to www.testflightapp.com</description>
-  <version>1.4-SNAPSHOT</version>
+  <version>1.4.1-SNAPSHOT</version>
   <packaging>hpi</packaging>
 
   <!-- get every artifact through maven.glassfish.org, which proxies all the artifacts that we need -->

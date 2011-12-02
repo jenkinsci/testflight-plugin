@@ -2,6 +2,7 @@ package testflight;
 
 import hudson.EnvVars;
 import hudson.Extension;
+import hudson.FilePath;
 import hudson.Launcher;
 import hudson.model.*;
 import hudson.model.AbstractBuild;
@@ -23,6 +24,7 @@ import java.util.*;
 
 import net.sf.json.JSONObject;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.StaplerRequest;
 
@@ -107,11 +109,17 @@ public class TestflightRecorder extends Recorder
 
         listener.getLogger().println("Uploading to testflight");
 
+        File tempDir = null;
         try
         {
             EnvVars vars = build.getEnvironment(listener);
 
-            File file = new File(vars.expand(filePath));
+            // Copy remote file to local file system.
+            tempDir = File.createTempFile("jtf", null);
+            tempDir.delete();
+            tempDir.mkdirs();
+            
+            File file = getFileLocally(build.getWorkspace(), vars.expand(filePath), tempDir);
             listener.getLogger().println(file);
 
             HttpClient httpclient = new DefaultHttpClient();
@@ -125,7 +133,7 @@ public class TestflightRecorder extends Recorder
             entity.addPart("file", fileBody);
             
             if (!StringUtils.isEmpty(dsymPath)) {
-              File dsymFile = new File(vars.expand(dsymPath));
+              File dsymFile = getFileLocally(build.getWorkspace(), vars.expand(dsymPath), tempDir);
               listener.getLogger().println(dsymFile);
               FileBody dsymFileBody = new FileBody(dsymFile);
               entity.addPart("dsym", dsymFileBody);
@@ -141,6 +149,15 @@ public class TestflightRecorder extends Recorder
             HttpEntity resEntity = response.getEntity();
 
             InputStream is = resEntity.getContent();
+
+            // Improved error handling.
+            if (response.getStatusLine().getStatusCode() != 200) {
+                String responseBody = new Scanner(is).useDelimiter("\\A").next();
+                listener.getLogger().println("Incorrect response code: " + response.getStatusLine().getStatusCode());
+                listener.getLogger().println(responseBody);
+                return false;
+            }
+
             JSONParser parser = new JSONParser();
 
             final Map parsedMap = (Map)parser.parse(new BufferedReader(new InputStreamReader(is)));
@@ -162,8 +179,44 @@ public class TestflightRecorder extends Recorder
             listener.getLogger().println(e);
             return false;
         }
+        finally
+        {
+            try
+            {
+                FileUtils.deleteDirectory(tempDir);
+            }
+            catch (IOException e)
+            {
+                try
+                {
+                    FileUtils.forceDeleteOnExit(tempDir);
+                }
+                catch (IOException e1)
+                {
+                    listener.getLogger().println(e1);
+                }
+            }
+        }
 
         return true;
+    }
+    
+    private File getFileLocally(FilePath workingDir, String strFile, File tempDir) throws IOException, InterruptedException
+    {
+        if (workingDir.isRemote())
+        {
+            FilePath remoteFile = new FilePath(workingDir, strFile);
+            File file = new File(tempDir, remoteFile.getName());
+            file.createNewFile();
+            FileOutputStream fos = new FileOutputStream(file);
+            remoteFile.copyTo(fos);
+            fos.close();
+            return file;
+        }
+        else
+        {
+            return new File(strFile);
+        }
     }
 
     @Override
