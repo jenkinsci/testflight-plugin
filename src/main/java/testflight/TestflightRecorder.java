@@ -3,10 +3,14 @@ package testflight;
 import hudson.EnvVars;
 import hudson.Extension;
 import hudson.FilePath;
+import hudson.FilePath.FileCallable;
 import hudson.Launcher;
 import hudson.model.*;
 import hudson.model.AbstractBuild;
+import hudson.remoting.VirtualChannel;
 import hudson.tasks.*;
+import hudson.util.DirScanner;
+import hudson.util.FileVisitor;
 import hudson.util.RunList;
 import org.apache.commons.collections.Predicate;
 import org.apache.http.HttpEntity;
@@ -102,7 +106,7 @@ public class TestflightRecorder extends Recorder
     }
 
     @Override
-    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener)
+    public boolean perform(AbstractBuild build, Launcher launcher, BuildListener listener) throws IOException, InterruptedException
     {
         if (build.getResult().isWorseOrEqualTo(Result.FAILURE))
             return false;
@@ -119,7 +123,21 @@ public class TestflightRecorder extends Recorder
             tempDir.delete();
             tempDir.mkdirs();
             
-            File file = getFileLocally(build.getWorkspace(), vars.expand(filePath), tempDir);
+            String fileStr;
+            if (this.filePath == null || this.filePath.trim().isEmpty())
+            {
+                fileStr = "**/*.ipa";
+            }
+            else
+            {
+                fileStr = vars.expand(this.filePath);
+            }
+            FilePath filePath = getFilePath(build.getWorkspace(), vars.expand(fileStr));
+            if (filePath == null)
+            {
+                throw new hudson.AbortException("Unable to find .ipa file. Looking for: " + fileStr);
+            }
+            File file = getFileLocally(filePath, tempDir);
             listener.getLogger().println(file);
 
             HttpClient httpclient = new DefaultHttpClient();
@@ -133,10 +151,16 @@ public class TestflightRecorder extends Recorder
             entity.addPart("file", fileBody);
             
             if (!StringUtils.isEmpty(dsymPath)) {
-              File dsymFile = getFileLocally(build.getWorkspace(), vars.expand(dsymPath), tempDir);
-              listener.getLogger().println(dsymFile);
-              FileBody dsymFileBody = new FileBody(dsymFile);
-              entity.addPart("dsym", dsymFileBody);
+                String dsymFileStr = vars.expand(this.dsymPath);
+                FilePath dsymFilePath = getFilePath(build.getWorkspace(), dsymFileStr);
+                if (dsymFilePath == null)
+                {
+                    throw new hudson.AbortException("Unable to find .dsym file. Looking for: " + dsymFileStr);
+                }
+                File dsymFile = getFileLocally(dsymFilePath, tempDir);
+                listener.getLogger().println(dsymFile);
+                FileBody dsymFileBody = new FileBody(dsymFile);
+                entity.addPart("dsym", dsymFileBody);
             }
             
             if (lists.length() > 0)
@@ -174,10 +198,18 @@ public class TestflightRecorder extends Recorder
             configureAction.urlName = (String)parsedMap.get("config_url");
             build.addAction(configureAction);
         }
+        catch (InterruptedException e)
+        {
+            throw e;
+        }
+        catch (IOException e)
+        {
+            throw e;
+        }
         catch (Exception e)
         {
-            listener.getLogger().println(e);
-            return false;
+            e.printStackTrace(listener.getLogger());
+            throw new hudson.AbortException("Exception while uploading to Testflight.");
         }
         finally
         {
@@ -201,11 +233,70 @@ public class TestflightRecorder extends Recorder
         return true;
     }
     
-    private File getFileLocally(FilePath workingDir, String strFile, File tempDir) throws IOException, InterruptedException
+    private FilePath getFilePath(FilePath workingDir, String globStr) throws IOException, InterruptedException
     {
-        if (workingDir.isRemote())
+        List<FilePath> matchingFiles = findFiles(workingDir, globStr);
+        if (matchingFiles.isEmpty())
         {
-            FilePath remoteFile = new FilePath(workingDir, strFile);
+            return null;
+        }
+        else
+        {
+            return matchingFiles.get(0);
+        }
+    }
+
+    private List<FilePath> findFiles(final FilePath root, final String globStr) throws IOException, InterruptedException
+    {
+        return root.act(new RemoteFileFinder(globStr));
+    }
+    
+    private static class RemoteFileFinder implements FileCallable<List<FilePath>>, Serializable{
+        private static final long serialVersionUID = 4077012804269527387L;
+        private String globStr;
+        public RemoteFileFinder(String globStr)
+        {
+            this.globStr = globStr;
+        }
+
+        public List<FilePath> invoke(File f, VirtualChannel channel) throws IOException, InterruptedException
+        {
+            LinkedList<FilePath> matchingFiles = new LinkedList<FilePath>();
+            
+            // Special Case: Check if the string specified was a single file
+            File absFile = new File(globStr);
+            if (absFile.exists())
+            {
+                matchingFiles.add(new FilePath(absFile));
+                return matchingFiles;
+            }
+            
+            ListVisitor listVisitor = new ListVisitor(matchingFiles);
+            DirScanner.Glob globScanner = new DirScanner.Glob(globStr, null);
+            globScanner.scan(f, listVisitor);
+            return matchingFiles;
+        }
+    }
+    
+    private static class ListVisitor extends FileVisitor implements Serializable{
+        private static final long serialVersionUID = 4599853329698643552L;
+        private LinkedList<FilePath> matchingFiles;
+        public ListVisitor(LinkedList<FilePath> matchingFiles)
+        {
+            this.matchingFiles = matchingFiles;
+        }
+
+        @Override
+        public void visit(File f, String relativePath) throws IOException
+        {
+            matchingFiles.add(new FilePath(f));
+        }
+    }
+    
+    private File getFileLocally(FilePath remoteFile, File tempDir) throws IOException, InterruptedException
+    {
+        if (remoteFile.isRemote())
+        {
             File file = new File(tempDir, remoteFile.getName());
             file.createNewFile();
             FileOutputStream fos = new FileOutputStream(file);
@@ -215,7 +306,7 @@ public class TestflightRecorder extends Recorder
         }
         else
         {
-            return new File(strFile);
+            return new File(remoteFile.absolutize().getRemote());
         }
     }
 
