@@ -151,7 +151,14 @@ public class TestflightRecorder extends Recorder
             tempDir.delete();
             tempDir.mkdirs();
             
-            File file = getFileLocally(build.getWorkspace(), vars.expand(filePath), tempDir);
+            boolean pathSpecified = filePath != null && !filePath.trim().isEmpty();
+            String expandPath;
+            if(!pathSpecified)
+            	expandPath = "$WORKSPACE";
+            else
+            	expandPath = filePath;
+            
+            File file = getFileLocally(build.getWorkspace(), vars.expand(expandPath), tempDir, pathSpecified);
             listener.getLogger().println(file);
 
             DefaultHttpClient httpClient = new DefaultHttpClient();
@@ -178,7 +185,7 @@ public class TestflightRecorder extends Recorder
             entity.addPart("file", fileBody);
             
             if (!StringUtils.isEmpty(dsymPath)) {
-              File dsymFile = getFileLocally(build.getWorkspace(), vars.expand(dsymPath), tempDir);
+              File dsymFile = getFileLocally(build.getWorkspace(), vars.expand(dsymPath), tempDir, true);
               listener.getLogger().println(dsymFile);
               FileBody dsymFileBody = new FileBody(dsymFile);
               entity.addPart("dsym", dsymFileBody);
@@ -246,22 +253,40 @@ public class TestflightRecorder extends Recorder
         return true;
     }
     
-    private File getFileLocally(FilePath workingDir, String strFile, File tempDir) throws IOException, InterruptedException
+    private File getFileLocally(FilePath workingDir, String strFile, File tempDir, boolean pathSpecified) throws IOException, InterruptedException
     {
-        if (workingDir.isRemote())
-        {
-            FilePath remoteFile = new FilePath(workingDir, strFile);
-            File file = new File(tempDir, remoteFile.getName());
-            file.createNewFile();
-            FileOutputStream fos = new FileOutputStream(file);
-            remoteFile.copyTo(fos);
-            fos.close();
-            return file;
+    	if(!pathSpecified) {
+    		File workspaceDir = new File(strFile);
+    		List<File> ipas = new LinkedList<File>();
+    		findIpas(workspaceDir, ipas);
+    		if(ipas.isEmpty())
+    			return workspaceDir;
+    		return ipas.get(0);
+    	} else {
+			if (workingDir.isRemote())
+			{
+				FilePath remoteFile = new FilePath(workingDir, strFile);
+				File file = new File(tempDir, remoteFile.getName());
+				file.createNewFile();
+				FileOutputStream fos = new FileOutputStream(file);
+				remoteFile.copyTo(fos);
+				fos.close();
+				return file;
+			}
+			else
+			{
+				return new File(strFile);
+			}
         }
-        else
-        {
-            return new File(strFile);
-        }
+    }
+    
+    private void findIpas(File root, List<File> ipas) {
+		for(File file : root.listFiles()) {
+			if(file.isDirectory())
+				findIpas(file, ipas);
+			else if(file.getName().endsWith(".ipa"))
+				ipas.add(file);
+		}
     }
 
     @Override
