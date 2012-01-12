@@ -34,5 +34,19 @@
     <f:entry title="Replace Build" field="replace">
         <f:checkbox />
     </f:entry>
+
+    <f:entry title="Proxy Host" field="proxyHost">
+        <f:textbox />
+    </f:entry>
+    <f:entry title="Proxy Port" field="proxyPort">
+        <f:textbox />
+    </f:entry>
+   <f:entry title="Proxy User" field="proxyUser">
+       <f:textbox />
+   </f:entry>
+   <f:entry title="Proxy Password" field="proxyPass">
+       <f:password />
+   </f:entry>
+
   </f:advanced>
 </j:jelly>

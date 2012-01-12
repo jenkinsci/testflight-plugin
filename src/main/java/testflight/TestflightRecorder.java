@@ -10,18 +10,22 @@ import hudson.tasks.*;
 import hudson.util.RunList;
 import org.apache.commons.collections.Predicate;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.conn.params.ConnRoutePNames;
 import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.client.HttpClient;
 import org.json.simple.parser.JSONParser;
 import org.kohsuke.stapler.DataBoundConstructor;
 import java.io.*;
 import java.util.*;
-
+import org.apache.http.auth.Credentials;
 import net.sf.json.JSONObject;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FileUtils;
@@ -77,9 +81,33 @@ public class TestflightRecorder extends Recorder
     {
         return this.replace;
     }
+
+    private String proxyHost;
+    public String getProxyHost()
+    {
+        return proxyHost;
+    }
+    
+    private String proxyUser;
+    public String getProxyUser()
+    {
+        return proxyUser;
+    }
+
+    private String proxyPass;
+    public String getProxyPass()
+    {
+        return proxyPass;
+    }
+    
+    private int proxyPort;
+    public int getProxyPort()
+    {
+        return proxyPort;
+    }
     
     @DataBoundConstructor
-    public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace)
+    public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort)
     {
         this.teamToken = teamToken;
         this.apiToken = apiToken;
@@ -89,6 +117,10 @@ public class TestflightRecorder extends Recorder
         this.dsymPath = dsymPath;
         this.replace = replace;
         this.lists = lists;
+        this.proxyHost = proxyHost;
+        this.proxyUser = proxyUser;
+        this.proxyPass = proxyPass;
+        this.proxyPort = proxyPort;
     }
 
     @Override
@@ -122,8 +154,21 @@ public class TestflightRecorder extends Recorder
             File file = getFileLocally(build.getWorkspace(), vars.expand(filePath), tempDir);
             listener.getLogger().println(file);
 
-            HttpClient httpclient = new DefaultHttpClient();
-            HttpPost httpPost = new HttpPost("http://testflightapp.com/api/builds.json");
+            DefaultHttpClient httpClient = new DefaultHttpClient();
+
+            // Configure the proxy if necessary
+            if(proxyHost!=null && !proxyHost.isEmpty() && proxyPort>0) {
+                Credentials cred = null;
+                if(proxyUser!=null && !proxyUser.isEmpty())
+                    cred = new UsernamePasswordCredentials(proxyUser, proxyPass);
+
+                httpClient.getCredentialsProvider().setCredentials(new AuthScope(proxyHost, proxyPort),cred);
+                HttpHost proxy = new HttpHost(proxyHost, proxyPort);
+                httpClient.getParams().setParameter( ConnRoutePNames.DEFAULT_PROXY, proxy);
+            }
+
+            HttpHost targetHost = new HttpHost("testflightapp.com");
+            HttpPost httpPost = new HttpPost("/api/builds.json");
             FileBody fileBody = new FileBody(file);
             
             MultipartEntity entity = new MultipartEntity();
@@ -145,7 +190,7 @@ public class TestflightRecorder extends Recorder
             entity.addPart("replace", new StringBody(replace ? "True" : "False"));
             httpPost.setEntity(entity);
 
-            HttpResponse response = httpclient.execute(httpPost);
+            HttpResponse response = httpClient.execute(targetHost,httpPost);
             HttpEntity resEntity = response.getEntity();
 
             InputStream is = resEntity.getContent();
