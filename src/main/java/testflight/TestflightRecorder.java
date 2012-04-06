@@ -215,16 +215,29 @@ public class TestflightRecorder extends Recorder
             final Map parsedMap = (Map)parser.parse(new BufferedReader(new InputStreamReader(is)));
 
             TestflightBuildAction installAction = new TestflightBuildAction();
+            String installUrl = (String)parsedMap.get("install_url");
             installAction.displayName = "Testflight Install Link";
             installAction.iconFileName = "package.gif";
-            installAction.urlName = (String)parsedMap.get("install_url");
+            installAction.urlName = installUrl;
             build.addAction(installAction);
+            listener.getLogger().println("Testflight Install Link: " + installUrl);
 
             TestflightBuildAction configureAction = new TestflightBuildAction();
+            String configUrl = (String)parsedMap.get("config_url");
             configureAction.displayName = "Testflight Configuration Link";
             configureAction.iconFileName = "gear2.gif";
-            configureAction.urlName = (String)parsedMap.get("config_url");
+            configureAction.urlName = configUrl;
             build.addAction(configureAction);
+            listener.getLogger().println("Testflight Config Link: " + configUrl);
+
+            build.addAction(new EnvAction());
+
+            // Add info about the selected build into the environment
+            EnvAction envData = build.getAction(EnvAction.class);
+            if (envData != null) {
+                envData.add("TESTFLIGHT_INSTALL_URL", installUrl);
+                envData.add("TESTFLIGHT_CONFIG_URL", configUrl);
+            }
         }
         catch (Exception e)
         {
@@ -349,4 +362,21 @@ public class TestflightRecorder extends Recorder
             return "Upload to Testflight";
         }
     }
+
+    private static class EnvAction implements EnvironmentContributingAction {
+        private transient Map<String,String> data = new HashMap<String,String>();
+
+        private void add(String key, String value) {
+            if (data==null) return;
+            data.put(key, value);
+        }
+
+        public void buildEnvVars(AbstractBuild<?,?> build, EnvVars env) {
+            if (data!=null) env.putAll(data);
+        }
+
+        public String getIconFileName() { return null; }
+        public String getDisplayName() { return null; }
+        public String getUrlName() { return null; }
+    }    
 }
