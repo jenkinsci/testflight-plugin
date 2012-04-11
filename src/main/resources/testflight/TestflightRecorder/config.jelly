@@ -21,7 +21,10 @@
   <f:entry title="dSYM File" field="dsymPath">
     <f:textbox />
   </f:entry>
-  <f:entry title="Build Notes" field="buildNotes">
+  <f:entry title="Send SCM changes as build notes" field="sendSCMchanges">
+    <f:checkbox />
+  </f:entry>
+  <f:entry title="Default Build Notes" field="buildNotes">
     <f:textarea />
   </f:entry>
   <f:advanced>

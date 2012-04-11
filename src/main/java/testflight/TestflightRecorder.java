@@ -8,6 +8,8 @@ import hudson.model.*;
 import hudson.model.AbstractBuild;
 import hudson.tasks.*;
 import hudson.util.RunList;
+import hudson.scm.ChangeLogSet.*;
+import hudson.scm.ChangeLogSet;
 import org.apache.commons.collections.Predicate;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
@@ -32,6 +34,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.StaplerRequest;
 
+
 public class TestflightRecorder extends Recorder
 {
     private String apiToken;
@@ -50,6 +53,12 @@ public class TestflightRecorder extends Recorder
     public Boolean getNotifyTeam()
     {
         return this.notifyTeam;
+    }
+    
+	private Boolean sendSCMchanges;
+    public Boolean getSendSCMchanges()
+    {
+        return this.sendSCMchanges;
     }
     
     private String buildNotes;
@@ -107,12 +116,13 @@ public class TestflightRecorder extends Recorder
     }
     
     @DataBoundConstructor
-    public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort)
+    public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, Boolean sendSCMchanges, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort)
     {
         this.teamToken = teamToken;
         this.apiToken = apiToken;
         this.notifyTeam = notifyTeam;
-        this.buildNotes = buildNotes;
+        this.sendSCMchanges = sendSCMchanges;
+		this.buildNotes = buildNotes;
         this.filePath = filePath;
         this.dsymPath = dsymPath;
         this.replace = replace;
@@ -178,10 +188,29 @@ public class TestflightRecorder extends Recorder
             HttpPost httpPost = new HttpPost("/api/builds.json");
             FileBody fileBody = new FileBody(file);
             
-            MultipartEntity entity = new MultipartEntity();
+			String notes = "";
+			if (sendSCMchanges) {
+				ChangeLogSet changeSet = build.getChangeSet();
+				if (changeSet.isEmptySet()) {
+					notes = vars.expand(buildNotes);
+					listener.getLogger().println("No changeset found, sending default build notes to TestFlight");
+				}
+				else {
+					for (Object changelog : changeSet.getItems()) {
+						notes = notes + ((ChangeLogSet.Entry)changelog).getMsg() + "\n";
+					}
+				}
+			}
+			else
+				notes = vars.expand(buildNotes);
+
+			MultipartEntity entity = new MultipartEntity();
             entity.addPart("api_token", new StringBody(apiToken));
             entity.addPart("team_token", new StringBody(teamToken));
-            entity.addPart("notes", new StringBody(vars.expand(buildNotes)));
+            //entity.addPart("notes", new StringBody(vars.expand(buildNotes)));
+			// Add the notes from the SCM changelogs
+			entity.addPart("notes", new StringBody(notes));
+			listener.getLogger().println("Notes to send to TestFlight: " + notes);
             entity.addPart("file", fileBody);
             
             if (!StringUtils.isEmpty(dsymPath)) {
