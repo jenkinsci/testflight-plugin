@@ -153,7 +153,7 @@ public class TestflightRecorder extends Recorder
             }
 
             TestflightUploader uploader = new TestflightUploader();
-            TestflightUploader.UploadRequest ur = createUploadRequest(file, dsymFile);
+            TestflightUploader.UploadRequest ur = createUploadRequest(file, dsymFile, vars);
 
             final Map parsedMap;
             try {
@@ -217,20 +217,20 @@ public class TestflightRecorder extends Recorder
         return true;
     }
 
-    private TestflightUploader.UploadRequest createUploadRequest(File file, File dsymFile) {
+    private TestflightUploader.UploadRequest createUploadRequest(File file, File dsymFile, EnvVars vars) {
         TestflightUploader.UploadRequest ur = new TestflightUploader.UploadRequest();
-        ur.apiToken = apiToken;
-        ur.buildNotes = buildNotes;
+        ur.apiToken = vars.expand(apiToken);
+        ur.buildNotes = vars.expand(buildNotes);
         ur.dsymFile = dsymFile;
         ur.file = file;
-        ur.lists = lists;
+        ur.lists =  vars.expand(lists);
         ur.notifyTeam = notifyTeam;
         ur.proxyHost = proxyHost;
         ur.proxyPass = proxyPass;
         ur.proxyPort = proxyPort;
         ur.proxyUser = proxyUser;
         ur.replace = replace;
-        ur.teamToken = teamToken;
+        ur.teamToken = vars.expand(teamToken);
         return ur;
     }
 
