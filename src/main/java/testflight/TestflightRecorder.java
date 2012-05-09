@@ -9,23 +9,9 @@ import hudson.model.AbstractBuild;
 import hudson.tasks.*;
 import hudson.util.RunList;
 import org.apache.commons.collections.Predicate;
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpHost;
-import org.apache.http.HttpResponse;
-import org.apache.http.auth.AuthScope;
-import org.apache.http.auth.UsernamePasswordCredentials;
-import org.apache.http.client.CredentialsProvider;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.conn.params.ConnRoutePNames;
-import org.apache.http.entity.mime.MultipartEntity;
-import org.apache.http.entity.mime.content.FileBody;
-import org.apache.http.entity.mime.content.StringBody;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.json.simple.parser.JSONParser;
 import org.kohsuke.stapler.DataBoundConstructor;
 import java.io.*;
 import java.util.*;
-import org.apache.http.auth.Credentials;
 import net.sf.json.JSONObject;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.FileUtils;
@@ -105,7 +91,7 @@ public class TestflightRecorder extends Recorder
     {
         return proxyPort;
     }
-    
+
     @DataBoundConstructor
     public TestflightRecorder(String apiToken, String teamToken, Boolean notifyTeam, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort)
     {
@@ -160,59 +146,23 @@ public class TestflightRecorder extends Recorder
             
             File file = getFileLocally(build.getWorkspace(), vars.expand(expandPath), tempDir, pathSpecified);
             listener.getLogger().println(file);
-
-            DefaultHttpClient httpClient = new DefaultHttpClient();
-
-            // Configure the proxy if necessary
-            if(proxyHost!=null && !proxyHost.isEmpty() && proxyPort>0) {
-                Credentials cred = null;
-                if(proxyUser!=null && !proxyUser.isEmpty())
-                    cred = new UsernamePasswordCredentials(proxyUser, proxyPass);
-
-                httpClient.getCredentialsProvider().setCredentials(new AuthScope(proxyHost, proxyPort),cred);
-                HttpHost proxy = new HttpHost(proxyHost, proxyPort);
-                httpClient.getParams().setParameter( ConnRoutePNames.DEFAULT_PROXY, proxy);
-            }
-
-            HttpHost targetHost = new HttpHost("testflightapp.com");
-            HttpPost httpPost = new HttpPost("/api/builds.json");
-            FileBody fileBody = new FileBody(file);
             
-            MultipartEntity entity = new MultipartEntity();
-            entity.addPart("api_token", new StringBody(apiToken));
-            entity.addPart("team_token", new StringBody(teamToken));
-            entity.addPart("notes", new StringBody(vars.expand(buildNotes)));
-            entity.addPart("file", fileBody);
-            
+            File dsymFile = null;
             if (!StringUtils.isEmpty(dsymPath)) {
-              File dsymFile = getFileLocally(build.getWorkspace(), vars.expand(dsymPath), tempDir, true);
-              listener.getLogger().println(dsymFile);
-              FileBody dsymFileBody = new FileBody(dsymFile);
-              entity.addPart("dsym", dsymFileBody);
+                dsymFile = getFileLocally(build.getWorkspace(), vars.expand(dsymPath), tempDir, true);
             }
-            
-            if (lists.length() > 0)
-                entity.addPart("distribution_lists", new StringBody(lists));
-            entity.addPart("notify", new StringBody(notifyTeam ? "True" : "False"));
-            entity.addPart("replace", new StringBody(replace ? "True" : "False"));
-            httpPost.setEntity(entity);
 
-            HttpResponse response = httpClient.execute(targetHost,httpPost);
-            HttpEntity resEntity = response.getEntity();
+            TestflightUploader uploader = new TestflightUploader();
+            TestflightUploader.UploadRequest ur = createUploadRequest(file, dsymFile);
 
-            InputStream is = resEntity.getContent();
-
-            // Improved error handling.
-            if (response.getStatusLine().getStatusCode() != 200) {
-                String responseBody = new Scanner(is).useDelimiter("\\A").next();
-                listener.getLogger().println("Incorrect response code: " + response.getStatusLine().getStatusCode());
-                listener.getLogger().println(responseBody);
+            final Map parsedMap;
+            try {
+                parsedMap = uploader.upload(ur);
+            } catch (UploadException ue) {
+                listener.getLogger().println("Incorrect response code: " + ue.getStatusCode());
+                listener.getLogger().println(ue.getResponseBody());
                 return false;
             }
-
-            JSONParser parser = new JSONParser();
-
-            final Map parsedMap = (Map)parser.parse(new BufferedReader(new InputStreamReader(is)));
 
             TestflightBuildAction installAction = new TestflightBuildAction();
             String installUrl = (String)parsedMap.get("install_url");
@@ -242,6 +192,7 @@ public class TestflightRecorder extends Recorder
         catch (Exception e)
         {
             listener.getLogger().println(e);
+            e.printStackTrace(listener.getLogger());
             return false;
         }
         finally
@@ -265,7 +216,24 @@ public class TestflightRecorder extends Recorder
 
         return true;
     }
-    
+
+    private TestflightUploader.UploadRequest createUploadRequest(File file, File dsymFile) {
+        TestflightUploader.UploadRequest ur = new TestflightUploader.UploadRequest();
+        ur.apiToken = apiToken;
+        ur.buildNotes = buildNotes;
+        ur.dsymFile = dsymFile;
+        ur.file = file;
+        ur.lists = lists;
+        ur.notifyTeam = notifyTeam;
+        ur.proxyHost = proxyHost;
+        ur.proxyPass = proxyPass;
+        ur.proxyPort = proxyPort;
+        ur.proxyUser = proxyUser;
+        ur.replace = replace;
+        ur.teamToken = teamToken;
+        return ur;
+    }
+
     private File getFileLocally(FilePath workingDir, String strFile, File tempDir, boolean pathSpecified) throws IOException, InterruptedException
     {
     	if(!pathSpecified) {
