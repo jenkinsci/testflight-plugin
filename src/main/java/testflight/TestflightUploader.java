@@ -14,19 +14,18 @@ import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.simple.parser.JSONParser;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.IOException;
+import java.io.*;
 import java.util.Map;
 import java.util.Scanner;
 
 /**
  * A testflight uploader
  */
-public class TestflightUploader {
-    static class UploadRequest {
+public class TestflightUploader implements Serializable {
+    static class UploadRequest implements Serializable
+    {
+        String filePath;
+        String dsymPath;
         String apiToken;
         String teamToken;
         Boolean notifyTeam;
@@ -92,22 +91,5 @@ public class TestflightUploader {
         JSONParser parser = new JSONParser();
 
         return (Map)parser.parse(new BufferedReader(new InputStreamReader(is)));
-    }
-
-    /**  Useful for testing */
-    public static void main(String[] args) throws Exception {
-        TestflightUploader uploader = new TestflightUploader();
-        UploadRequest r = new UploadRequest();
-        r.apiToken = args[0];
-        r.teamToken = args[1];
-        r.buildNotes = args[2];
-        File file = new File(args[3]);
-        r.file = file;
-        r.dsymFile = null;
-        r.notifyTeam = true;
-        r.replace = true;
-        r.lists = args[4];
-
-        uploader.upload(r);
     }
 }
