@@ -5,6 +5,8 @@ import hudson.Extension;
 import hudson.Launcher;
 import hudson.model.*;
 import hudson.model.AbstractBuild;
+import hudson.scm.ChangeLogSet;
+import hudson.scm.ChangeLogSet.Entry;
 import hudson.tasks.*;
 import hudson.util.RunList;
 import hudson.util.Secret;
@@ -40,6 +42,12 @@ public class TestflightRecorder extends Recorder
     public String getBuildNotes()
     {
         return this.buildNotes;
+    }
+    
+    private boolean appendChangelog;
+    public boolean getAppendChangelog()
+    {
+        return this.appendChangelog;
     }
     
     private String filePath;
@@ -91,12 +99,13 @@ public class TestflightRecorder extends Recorder
     }
 
     @DataBoundConstructor
-    public TestflightRecorder(Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotes, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort)
+    public TestflightRecorder(Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotes, Boolean appendChangelog, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort)
     {
         this.teamToken = teamToken;
         this.apiToken = apiToken;
         this.notifyTeam = notifyTeam;
         this.buildNotes = buildNotes;
+        this.appendChangelog = appendChangelog;
         this.filePath = filePath;
         this.dsymPath = dsymPath;
         this.replace = replace;
@@ -118,7 +127,7 @@ public class TestflightRecorder extends Recorder
     }
 
     @Override
-    public boolean perform(AbstractBuild build, Launcher launcher, final BuildListener listener)
+    public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener)
     {
         if (build.getResult().isWorseOrEqualTo(Result.FAILURE))
             return false;
@@ -136,7 +145,7 @@ public class TestflightRecorder extends Recorder
             else
             	expandPath = filePath;
             
-            TestflightUploader.UploadRequest ur = createPartialUploadRequest(vars, expandPath);
+            TestflightUploader.UploadRequest ur = createPartialUploadRequest(vars, build, expandPath);
 
             TestflightRemoteRecorder remoteRecorder = new TestflightRemoteRecorder(pathSpecified, ur, listener);
 
@@ -186,12 +195,40 @@ public class TestflightRecorder extends Recorder
         return true;
     }
 
-    private TestflightUploader.UploadRequest createPartialUploadRequest(EnvVars vars, String expandPath) {
+    private TestflightUploader.UploadRequest createPartialUploadRequest(EnvVars vars, AbstractBuild<?, ?> build, String expandPath) {
         TestflightUploader.UploadRequest ur = new TestflightUploader.UploadRequest();
         ur.filePath = vars.expand(expandPath);
         ur.dsymPath = vars.expand(dsymPath);
         ur.apiToken = vars.expand(Secret.toString(apiToken));
         ur.buildNotes = vars.expand(buildNotes);
+        
+        // Append the changelog if we should and can
+        ChangeLogSet<?> changeSet = build.getChangeSet();
+        
+        if (appendChangelog && !changeSet.isEmptySet()) 
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+            
+            // Show the build notes first
+            stringBuilder.append(ur.buildNotes);
+            
+            // Then append the changelog
+            stringBuilder.append("\n\nChanges:\n");
+            
+            int entryNumber = 1;
+            
+            for (Entry entry : changeSet) 
+            {
+                stringBuilder.append("\n").append(entryNumber).append(". ");
+                stringBuilder.append(entry.getMsg()).append(" — ").append(entry.getAuthor());
+                
+                entryNumber++;
+            }
+            
+            // Update the upload request's build notes
+            ur.buildNotes = stringBuilder.toString();
+        }
+        
         ur.lists =  vars.expand(lists);
         ur.notifyTeam = notifyTeam;
         ur.proxyHost = proxyHost;

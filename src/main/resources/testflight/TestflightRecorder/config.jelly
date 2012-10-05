@@ -24,6 +24,9 @@
   <f:entry title="Build Notes" field="buildNotes">
     <f:textarea />
   </f:entry>
+  <f:entry title="Append changelog to build notes" field="appendChangelog">
+    <f:checkbox />
+  </f:entry>
   <f:advanced>
     <f:entry title="Distribution Lists" field="lists">
         <f:textbox />
