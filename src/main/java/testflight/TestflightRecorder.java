@@ -44,11 +44,11 @@ public class TestflightRecorder extends Recorder
         return this.buildNotes;
     }
 
-		private boolean appendChangelog;
-		public boolean getAppendChangelog()
-		{
-			return this.appendChangelog;
-		}
+	private boolean appendChangelog;
+	public boolean getAppendChangelog()
+	{
+		return this.appendChangelog;
+	}
     
     private String filePath;
     public String getFilePath()
@@ -105,7 +105,7 @@ public class TestflightRecorder extends Recorder
         this.apiToken = apiToken;
         this.notifyTeam = notifyTeam;
         this.buildNotes = buildNotes;
-				this.appendChangelog = appendChangelog;
+        this.appendChangelog = appendChangelog;
         this.filePath = filePath;
         this.dsymPath = dsymPath;
         this.replace = replace;
@@ -200,33 +200,33 @@ public class TestflightRecorder extends Recorder
         ur.filePath = vars.expand(expandPath);
         ur.dsymPath = vars.expand(dsymPath);
         ur.apiToken = vars.expand(Secret.toString(apiToken));
-				ur.buildNotes = vars.expand(buildNotes);
-				
-				// Append the changelog if we should and can
-				ChangeLogSet<?> changeSet = build.getChangeSet();
-				
-				if (appendChangelog && !changeSet.isEmptySet()) 
-				{
-          StringBuilder stringBuilder = new StringBuilder();
-          
-          // Show the build notes first
-          stringBuilder.append(ur.buildNotes);
-          
-          // Then append the changelog
-          stringBuilder.append("\n\nChanges:\n");
-  
-          int entryNumber = 1;
+		ur.buildNotes = vars.expand(buildNotes);
+		
+		// Append the changelog if we should and can
+		ChangeLogSet<?> changeSet = build.getChangeSet();
+		
+		if (appendChangelog && !changeSet.isEmptySet()) 
+		{
+            StringBuilder stringBuilder = new StringBuilder();
+
+            // Show the build notes first
+            stringBuilder.append(ur.buildNotes);
+
+            // Then append the changelog
+            stringBuilder.append("\n\nChanges:\n");
+
+            int entryNumber = 1;
             
-		      for (Entry entry : changeSet) 
-		      {
-            stringBuilder.append("\n").append(entryNumber).append(". ");
-            stringBuilder.append(entry.getMsg()).append(" — ").append(entry.getAuthor());
-            
-            entryNumber++;
-          }
+            for (Entry entry : changeSet) 
+            {
+                stringBuilder.append("\n").append(entryNumber).append(". ");
+                stringBuilder.append(entry.getMsg()).append(" — ").append(entry.getAuthor());
+
+                entryNumber++;
+            }
           
-          // Update the upload request's build notes
-          ur.buildNotes = stringBuilder.toString();
+            // Update the upload request's build notes
+            ur.buildNotes = stringBuilder.toString();
         }
 
         ur.lists =  vars.expand(lists);
