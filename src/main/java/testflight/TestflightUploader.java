@@ -15,6 +15,7 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.simple.parser.JSONParser;
 
 import java.io.*;
+import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.Scanner;
 
@@ -62,7 +63,7 @@ public class TestflightUploader implements Serializable {
         MultipartEntity entity = new MultipartEntity();
         entity.addPart("api_token", new StringBody(ur.apiToken));
         entity.addPart("team_token", new StringBody(ur.teamToken));
-        entity.addPart("notes", new StringBody(ur.buildNotes));
+        entity.addPart("notes", new StringBody(ur.buildNotes, "text/plain",Charset.forName("UTF-8")));
         entity.addPart("file", fileBody);
 
         if (ur.dsymFile != null) {
