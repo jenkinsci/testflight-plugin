@@ -145,9 +145,16 @@ public class TestflightRecorder extends Recorder
             else
             	expandPath = filePath;
             
-            TestflightUploader.UploadRequest ur = createPartialUploadRequest(vars, build, expandPath);
+            boolean dsymPathSpecified = dsymPath != null && !dsymPath.trim().isEmpty();
+            String dsymExpandPath;
+            if (!dsymPathSpecified)
+                dsymExpandPath = "$WORKSPACE";
+            else
+                dsymExpandPath = dsymPath;
 
-            TestflightRemoteRecorder remoteRecorder = new TestflightRemoteRecorder(pathSpecified, ur, listener);
+            TestflightUploader.UploadRequest ur = createPartialUploadRequest(vars, build, expandPath, dsymExpandPath);
+
+            TestflightRemoteRecorder remoteRecorder = new TestflightRemoteRecorder(pathSpecified, dsymPathSpecified, ur, listener);
 
             final Map parsedMap;
 
@@ -195,10 +202,10 @@ public class TestflightRecorder extends Recorder
         return true;
     }
 
-    private TestflightUploader.UploadRequest createPartialUploadRequest(EnvVars vars, AbstractBuild<?, ?> build, String expandPath) {
+    private TestflightUploader.UploadRequest createPartialUploadRequest(EnvVars vars, AbstractBuild<?, ?> build, String expandPath, String dsymExpandPath) {
         TestflightUploader.UploadRequest ur = new TestflightUploader.UploadRequest();
         ur.filePath = vars.expand(expandPath);
-        ur.dsymPath = vars.expand(dsymPath);
+        ur.dsymPath = vars.expand(dsymExpandPath);
         ur.apiToken = vars.expand(Secret.toString(apiToken));
         ur.buildNotes = createBuildNotes(vars.expand(buildNotes), build.getChangeSet());
         ur.lists =  vars.expand(lists);
