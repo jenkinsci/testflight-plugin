@@ -6,8 +6,6 @@ import org.apache.commons.lang.StringUtils;
 
 import java.io.File;
 import java.io.Serializable;
-import java.util.LinkedList;
-import java.util.List;
 
 /**
  * Code for sending a build to TestFlight which can run on a master or slave.
