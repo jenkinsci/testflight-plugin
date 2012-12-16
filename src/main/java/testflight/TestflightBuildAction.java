@@ -3,8 +3,6 @@ package testflight;
 import hudson.model.Action;
 import hudson.model.ProminentProjectAction;
 
-import java.awt.*;
-
 public class TestflightBuildAction implements ProminentProjectAction
 {
     public String iconFileName;
