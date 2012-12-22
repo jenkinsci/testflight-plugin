@@ -23,8 +23,8 @@ public class TestflightRemoteRecorder implements Callable<Object, Throwable>, Se
     }
 
     public Object call() throws Throwable {
-        uploadRequest.file = identifyIpa();
-        uploadRequest.dsymFile = identifyDsym();
+        uploadRequest.file = identifyFile(pathSpecified, uploadRequest.filePath, ".ipa");
+        uploadRequest.dsymFile = identifyFile(dsymPathSpecified, uploadRequest.dsymPath, "-dSYM.zip");
 
         listener.getLogger().println(uploadRequest.file);
 
@@ -32,55 +32,28 @@ public class TestflightRemoteRecorder implements Callable<Object, Throwable>, Se
         return uploader.upload(uploadRequest);
     }
 
-    private File identifyIpa() {
-        if (pathSpecified) {
-            return new File(uploadRequest.filePath);
-        } else {
-            File workspaceDir = new File(uploadRequest.filePath);
-            File possibleIpa = TestflightRemoteRecorder.findIpa(workspaceDir);
-            return possibleIpa != null ? possibleIpa : workspaceDir;
+    private File identifyFile(boolean specified, String path, String endsWith) {
+        if (specified) {
+            return new File(path);
         }
+
+        File workspaceDir = new File(path);
+        File possibleDsym = TestflightRemoteRecorder.findFile(workspaceDir, endsWith);
+        return possibleDsym != null ? possibleDsym : null;
     }
 
-    public static File findIpa(File root) {
-        for (File file : root.listFiles()) {
-            if (file.isDirectory())
-            {
-                File ipaResult = findIpa(file);
-                if(ipaResult != null)
-                    return ipaResult;
+	private static File findFile(File root, String endsWith) {
+		for (File file : root.listFiles()) {
+            if (file.isDirectory()) {
+                File fileResult = findFile(file, endsWith);
+                if (fileResult != null) {
+                    return fileResult;
+                }
             }
-            else if (file.getName().endsWith(".ipa"))
-            {
+            else if (file.getName().endsWith(endsWith)) {
                 return file;
             }
         }
         return null;
-    }
-
-    private File identifyDsym() {
-        if (dsymPathSpecified) {
-            return new File(uploadRequest.dsymPath);
-        } else {
-            File workspaceDir = new File(uploadRequest.dsymPath);
-            File possibleDsym = TestflightRemoteRecorder.findDsym(workspaceDir);
-            return possibleDsym != null ? possibleDsym : null;
-        }
-    }
-
-    public static File findDsym(File root) {
-        for (File file : root.listFiles()) {
-            if (file.isDirectory())
-            {
-                File dsymResult = findDsym(file);
-                if(dsymResult != null)
-                    return dsymResult;
-            }
-            else if (file.getName().endsWith("-dSYM.zip"))
-            {
-                return file;
-            }
-        }
-        return null;
-    }
+	}
 }
