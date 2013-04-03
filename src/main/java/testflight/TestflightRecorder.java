@@ -252,7 +252,9 @@ public class TestflightRecorder extends Recorder
 
         Collection predicated = CollectionUtils.select(builds, new Predicate() {
             public boolean evaluate(Object o) {
-                return ((AbstractBuild<?,?>)o).getResult().isBetterOrEqualTo(Result.SUCCESS);
+				Result result  = ((AbstractBuild<?,?>)o).getResult();
+				if (result == null) return false; // currently running builds can have a null result
+                return result.isBetterOrEqualTo(Result.SUCCESS);
             }
         });
 
