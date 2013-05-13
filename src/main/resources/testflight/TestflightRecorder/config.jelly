@@ -9,12 +9,14 @@
     Creates a text field that shows the value of the "name" property.
     When submitted, it will be passed to the corresponding constructor parameter.
   -->
-  <f:entry title="API Token" field="apiToken">
-    <f:password />
+  <f:entry title="Token Pair">
+    <select class="setting-input" name="tokenPairName" description="Select TestFlight token pair. These are configured globally.">
+      <j:forEach var="tokenPair" items="${descriptor.tokenPairs}">
+        <f:option selected="${tokenPair.tokenPairName==instance.tokenPairName}">${tokenPair.tokenPairName}</f:option>
+      </j:forEach>
+    </select>
   </f:entry>
-  <f:entry title="Team Token" field="teamToken">
-    <f:password />
-  </f:entry>
+
   <f:entry title="IPA/APK File" field="filePath">
     <f:textbox />
   </f:entry>

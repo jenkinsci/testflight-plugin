@@ -1,0 +1,25 @@
+<j:jelly xmlns:j="jelly:core" xmlns:st="jelly:stapler" xmlns:d="jelly:define" xmlns:l="/lib/layout" xmlns:t="/lib/hudson" xmlns:f="/lib/form">
+  <!-- nothing to configure -->
+  <f:section title="Test Flight">
+    <f:entry title="Test Flight Tokens" description="Token configurations for uploading to TestFlight">
+      <f:repeatable var="tokenPair" items="${descriptor.tokenPairs}">
+        <table width="100%">
+          <f:entry title="Token Pair Name">
+            <f:textbox name="tokenPair.tokenPairName" value="${tokenPair.tokenPairName}" />
+          </f:entry>
+          <f:entry title="API Token">
+            <f:password name="tokenPair.apiToken" value="${tokenPair.apiToken}" />
+          </f:entry>
+          <f:entry title="Team Token">
+            <f:password name="tokenPair.teamToken" value="${tokenPair.teamToken}" />
+          </f:entry>
+          <f:entry title="">
+            <div align="right">
+              <f:repeatableDeleteButton />
+            </div>
+          </f:entry>
+        </table>
+      </f:repeatable>
+    </f:entry>
+  </f:section>
+</j:jelly>
