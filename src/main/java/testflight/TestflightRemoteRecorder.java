@@ -97,41 +97,48 @@ public class TestflightRemoteRecorder implements Callable<Object, Throwable>, Se
 
     /* if a specified filePath is specified, return it, otherwise find in the workspace the DSYM matching the specified ipa file name */
     private File identifyDsym(String filePath, String ipaName) {
-        File dsymFile;
-        if (filePath != null && !filePath.trim().isEmpty()) {
-            dsymFile = findRelativeFile(filePath);
-        } else {
+        File foundFile = findFilePath(filePath);
+
+        if (foundFile.isDirectory()) {
             String fileName = FilenameUtils.removeExtension(ipaName);
-            Collection<File> files = FileUtils.listFiles(new File(remoteWorkspace), FileFilterUtils.nameFileFilter(fileName + "-dSYM.zip"), TrueFileFilter.INSTANCE);
+            Collection<File> files = FileUtils.listFiles(foundFile, FileFilterUtils.nameFileFilter(fileName + "-dSYM.zip"), TrueFileFilter.INSTANCE);
             if (!files.isEmpty()) {
-                dsymFile = files.iterator().next();
+                foundFile = files.iterator().next();
             } else {
-                dsymFile = null;
+                foundFile = null;
             }
         }
-        return dsymFile;
+        return foundFile;
     }
 
     /* if a specified filePath is specified, return it, otherwise find recursively all ipa/apk files in the remoteworkspace */
     private Collection<File> findIpaOrApkFiles(String filePath) {
+        File foundFile = findFilePath(filePath);
+
         Collection<File> files;
-        if (filePath != null && !filePath.trim().isEmpty()) {
-            files = Collections.singleton(findRelativeFile(filePath));
-        } else {
+        if (foundFile.isDirectory()) {
             String[] extensions = {"ipa", "apk"};
             boolean recursive = true;
-            files = FileUtils.listFiles(new File(remoteWorkspace), extensions, recursive);
+            files = FileUtils.listFiles(foundFile, extensions, recursive);
+        } else {
+            files = Collections.singleton(foundFile);
         }
         return files;
     }
 
-    private File findRelativeFile(String path) {
-        File f = new File(path);
-        if (f.exists())
-            return f;
-        f = new File(remoteWorkspace, path);
-        if (f.exists())
-            return f;
-        throw new IllegalArgumentException("Couldn't find file " + path + " in workspace " + remoteWorkspace);
+    private File findFilePath(String filePath) {
+        File foundFile;
+
+        if (filePath != null && !filePath.trim().isEmpty()) {
+            foundFile = new File(filePath);
+            if (!foundFile.exists())
+                foundFile = new File(remoteWorkspace, filePath);
+            if (!foundFile.exists())
+                throw new IllegalArgumentException("Couldn't find file " + filePath + " in workspace " + remoteWorkspace);
+        } else {
+            foundFile = new File(remoteWorkspace);
+        }
+
+        return foundFile;
     }
 }
