@@ -2,3 +2,7 @@
 *.iml
 target
 *.log
+.project
+.classpath
+org.eclipse.jdt.core.prefs
+work
