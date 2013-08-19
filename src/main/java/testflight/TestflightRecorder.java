@@ -13,10 +13,14 @@ import hudson.util.CopyOnWriteList;
 import hudson.util.RunList;
 import hudson.util.Secret;
 import org.apache.commons.collections.Predicate;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 import hudson.model.Hudson;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.*;
 
 import net.sf.json.JSONObject;
@@ -55,6 +59,13 @@ public class TestflightRecorder extends Recorder {
     public String getBuildNotes() {
         return this.buildNotes;
     }
+
+    private String buildNotesPath;
+
+    public String getBuildNotesPath() {
+        return this.buildNotesPath;
+    }
+
 
     private boolean appendChangelog;
 
@@ -131,12 +142,13 @@ public class TestflightRecorder extends Recorder {
     }
     
     @DataBoundConstructor
-    public TestflightRecorder(String tokenPairName, Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotes, Boolean appendChangelog, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort, Boolean debug, TestflightTeam [] additionalTeams) {
+    public TestflightRecorder(String tokenPairName, Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotesPath, String buildNotes, Boolean appendChangelog, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort, Boolean debug, TestflightTeam [] additionalTeams) {
         this.tokenPairName = tokenPairName;
         this.apiToken = apiToken;
         this.teamToken = teamToken;
         this.notifyTeam = notifyTeam;
         this.buildNotes = buildNotes;
+        this.buildNotesPath = buildNotesPath;
         this.appendChangelog = appendChangelog;
         this.filePath = filePath;
         this.dsymPath = dsymPath;
@@ -257,7 +269,8 @@ public class TestflightRecorder extends Recorder {
         ur.filePaths = vars.expand(StringUtils.trim(team.getFilePath()));
         ur.dsymPath = vars.expand(StringUtils.trim(team.getDsymPath()));
         ur.apiToken = vars.expand(Secret.toString(tokenPair.getApiToken()));
-        ur.buildNotes = createBuildNotes(vars.expand(buildNotes), build.getChangeSet());
+        File buildNotesFile = getBuildNotesFile(vars, buildNotesPath);
+        ur.buildNotes = createBuildNotes(buildNotesFile, vars.expand(buildNotes), build.getChangeSet());
         ur.lists = vars.expand(lists);
         ur.notifyTeam = notifyTeam;
         ProxyConfiguration proxy = getProxy();
@@ -270,6 +283,30 @@ public class TestflightRecorder extends Recorder {
         ur.debug = debug;
         return ur;
     }
+
+    private File getBuildNotesFile(EnvVars vars, String buildNotesPath) {
+        if(buildNotesPath != null && !buildNotesPath.isEmpty()) {
+            buildNotesPath = vars.expand(buildNotesPath);
+            File buildNotesFile = new File(buildNotesPath);
+            if(buildNotesFile.exists()) {
+                return buildNotesFile;
+            }
+            else {
+                buildNotesFile = new File(vars.expand("$WORKSPACE"), buildNotesPath);
+                if (buildNotesFile.exists()) {
+                    return buildNotesFile;
+                }
+            }
+        }
+
+        File buildNotesFile = new File(vars.expand("$WORKSPACE"),"BUILD_NOTES");
+        if (buildNotesFile.exists()) {
+            return buildNotesFile;
+        }
+
+        return null;
+    }
+
 
     private ProxyConfiguration getProxy() {
         ProxyConfiguration proxy;
@@ -285,7 +322,19 @@ public class TestflightRecorder extends Recorder {
     }
 
     // Append the changelog if we should and can
-    private String createBuildNotes(String buildNotes, final ChangeLogSet<?> changeSet) {
+    private String createBuildNotes(File buildNotesFile, String buildNotes, final ChangeLogSet<?> changeSet) {
+        if(buildNotesFile != null) {
+            try {
+                String fileContents = FileUtils.readFileToString(buildNotesFile, "UTF-8");
+                buildNotes = fileContents + "\n\n" + buildNotes;
+            } catch (FileNotFoundException e) {
+                //the file should have been checked if it exists, but if not, just ignore it.
+            } catch (IOException e) {
+                //ignore it
+            }
+        }
+
+
         if (appendChangelog) {
             StringBuilder stringBuilder = new StringBuilder();
 

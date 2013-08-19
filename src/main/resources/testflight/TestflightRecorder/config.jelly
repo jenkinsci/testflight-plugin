@@ -46,7 +46,10 @@
        </f:entry> 
       </table>
     </f:repeatable>
-  </f:entry>      
+  </f:entry>
+  <f:entry title="Build Notes Path" field="buildNotesPath">
+          <f:textbox />
+  </f:entry>
   <f:entry title="Build Notes" field="buildNotes">
     <f:textarea />
   </f:entry>
