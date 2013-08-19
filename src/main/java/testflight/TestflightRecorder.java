@@ -62,6 +62,12 @@ public class TestflightRecorder extends Recorder {
         return this.appendChangelog;
     }
 
+    private boolean combineChangelogSinceLastSuccess;
+
+    public boolean getCombineChangelogSinceLastSuccess() {
+        return this.combineChangelogSinceLastSuccess;
+    }
+
     /**
      * Comma- or space-separated list of patterns of files/directories to be archived.
      * The variable hasn't been renamed yet for compatibility reasons
@@ -131,13 +137,14 @@ public class TestflightRecorder extends Recorder {
     }
     
     @DataBoundConstructor
-    public TestflightRecorder(String tokenPairName, Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotes, Boolean appendChangelog, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort, Boolean debug, TestflightTeam [] additionalTeams) {
+    public TestflightRecorder(String tokenPairName, Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotes, Boolean appendChangelog, Boolean combineChangelogSinceLastSuccess, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort, Boolean debug, TestflightTeam [] additionalTeams) {
         this.tokenPairName = tokenPairName;
         this.apiToken = apiToken;
         this.teamToken = teamToken;
         this.notifyTeam = notifyTeam;
         this.buildNotes = buildNotes;
         this.appendChangelog = appendChangelog;
+        this.combineChangelogSinceLastSuccess = combineChangelogSinceLastSuccess;
         this.filePath = filePath;
         this.dsymPath = dsymPath;
         this.replace = replace;
@@ -257,7 +264,9 @@ public class TestflightRecorder extends Recorder {
         ur.filePaths = vars.expand(StringUtils.trim(team.getFilePath()));
         ur.dsymPath = vars.expand(StringUtils.trim(team.getDsymPath()));
         ur.apiToken = vars.expand(Secret.toString(tokenPair.getApiToken()));
-        ur.buildNotes = createBuildNotes(vars.expand(buildNotes), build.getChangeSet());
+
+        List<Entry> entries = combineChangelogSinceLastSuccess ? getChangeSetEntriesSinceLastSuccess(build) : getChangeSetEntries(build);
+        ur.buildNotes = createBuildNotes(vars.expand(buildNotes), entries);
         ur.lists = vars.expand(lists);
         ur.notifyTeam = notifyTeam;
         ProxyConfiguration proxy = getProxy();
@@ -269,6 +278,46 @@ public class TestflightRecorder extends Recorder {
         ur.teamToken = vars.expand(Secret.toString(tokenPair.getTeamToken()));
         ur.debug = debug;
         return ur;
+    }
+
+    private List<Entry> getChangeSetEntries(AbstractBuild<?, ?> build) {
+        ArrayList<Entry> entries = new ArrayList<Entry>();
+        ChangeLogSet<?> changeSet = build.getChangeSet();
+        for (Entry entry : changeSet) {
+            entries.add(entry);
+        }
+        return entries;
+    }
+
+    private List<Entry> getChangeSetEntriesSinceLastSuccess(AbstractBuild<?, ?> build) {
+        ArrayList<Entry> entries = new ArrayList<Entry>();
+
+        //The next build after the last successful one should either be a failure, or the current build.
+        //It could be in progress I guess, but we should probably just append the changelog anyway.
+        AbstractBuild<?, ?> lastBuild = build.getPreviousSuccessfulBuild();
+        if(lastBuild != null) {
+            lastBuild = lastBuild.getNextBuild();
+        }
+        else {
+            return getChangeSetEntries(build);
+        }
+
+        while(lastBuild != null) {
+
+            ChangeLogSet<?> changeSet = lastBuild.getChangeSet();
+            if(changeSet != null) {
+                for (Entry entry : changeSet) {
+                    entries.add(entry);
+                }
+            }
+
+            if(lastBuild.equals(build))
+                break;
+
+            lastBuild = lastBuild.getNextBuild();
+        }
+
+        return entries;
     }
 
     private ProxyConfiguration getProxy() {
@@ -285,7 +334,7 @@ public class TestflightRecorder extends Recorder {
     }
 
     // Append the changelog if we should and can
-    private String createBuildNotes(String buildNotes, final ChangeLogSet<?> changeSet) {
+    private String createBuildNotes(String buildNotes, final List<Entry> changeSet) {
         if (appendChangelog) {
             StringBuilder stringBuilder = new StringBuilder();
 
@@ -294,7 +343,7 @@ public class TestflightRecorder extends Recorder {
 
             // Then append the changelog
             stringBuilder.append("\n\n")
-                    .append(changeSet.isEmptySet() ? Messages.TestflightRecorder_EmptyChangeSet() : Messages.TestflightRecorder_Changelog())
+                    .append(changeSet.isEmpty() ? Messages.TestflightRecorder_EmptyChangeSet() : Messages.TestflightRecorder_Changelog())
                     .append("\n");
 
             int entryNumber = 1;
