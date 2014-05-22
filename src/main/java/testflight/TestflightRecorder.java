@@ -261,6 +261,7 @@ public class TestflightRecorder extends Recorder {
         ur.lists = vars.expand(lists);
         ur.notifyTeam = notifyTeam;
         ProxyConfiguration proxy = getProxy();
+        ur.noProxyHostPatterns = proxy.getNoProxyHostPatterns();
         ur.proxyHost = proxy.name;
         ur.proxyPass = proxy.getPassword();
         ur.proxyPort = proxy.port;
