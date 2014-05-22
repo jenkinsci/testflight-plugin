@@ -1,5 +1,14 @@
 package testflight;
 
+
+import java.io.*;
+import java.nio.charset.Charset;
+import java.util.List;
+import java.util.Map;
+import java.util.Scanner;
+import java.util.regex.Pattern;
+import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.builder.ToStringBuilder;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
@@ -13,14 +22,6 @@ import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.json.simple.parser.JSONParser;
-import org.apache.commons.io.IOUtils;
-
-import java.io.*;
-import java.nio.charset.Charset;
-import java.util.Map;
-import java.util.Scanner;
-
-import org.apache.commons.lang.builder.ToStringBuilder;
 
 /**
  * A testflight uploader
@@ -45,8 +46,11 @@ public class TestflightUploader implements Serializable {
         String proxyUser;
         String proxyPass;
         int proxyPort;
+        List<Pattern> noProxyHostPatterns;
         Boolean debug;
-
+        static final String apiDomain = "testflightapp.com";
+        static final String httpPost = "/api/builds.json";
+        @Override
         public String toString() {
             return new ToStringBuilder(this)
                     .append("filePaths", filePaths)
@@ -83,6 +87,7 @@ public class TestflightUploader implements Serializable {
             r2.proxyUser = r.proxyUser;
             r2.proxyPort = r.proxyPort;
             r2.proxyPass = r.proxyPass;
+            r2.noProxyHostPatterns = r.noProxyHostPatterns;
             r2.debug = r.debug;
 
             return r2;
@@ -95,22 +100,41 @@ public class TestflightUploader implements Serializable {
         this.logger = logger;
     }
 
+    private boolean ignoreProxy(UploadRequest ur){
+        for (Pattern pattern : ur.noProxyHostPatterns){
+            if(pattern.matcher(UploadRequest.apiDomain).matches()){
+                logDebug("Pattern '" + pattern.toString() + "' matches '" + UploadRequest.apiDomain +"'");
+                return true;
+            }
+            logDebug("Pattern '" + pattern.toString() + "' does not match '" + UploadRequest.apiDomain +"'");
+        }
+        return false;
+    }
+    
     public Map upload(UploadRequest ur) throws IOException, org.json.simple.parser.ParseException {
         DefaultHttpClient httpClient = new DefaultHttpClient();
 
-        // Configure the proxy if necessary
-        if (ur.proxyHost != null && !ur.proxyHost.isEmpty() && ur.proxyPort > 0) {
-            Credentials cred = null;
-            if (ur.proxyUser != null && !ur.proxyUser.isEmpty())
-                cred = new UsernamePasswordCredentials(ur.proxyUser, ur.proxyPass);
+        if(ignoreProxy(ur)){
+            //clear proxy settings to provide correct debug messages
+            ur.proxyHost = "<ignored>";
+            ur.proxyPort = 0;
+            ur.proxyUser = "<ignored>";
+            ur.proxyPass = "<ignored>";
+        }else{ 
+            // Configure the proxy if necessary
+            if (ur.proxyHost != null && !ur.proxyHost.isEmpty() && ur.proxyPort > 0) {
+                Credentials cred = null;
+                if (ur.proxyUser != null && !ur.proxyUser.isEmpty())
+                    cred = new UsernamePasswordCredentials(ur.proxyUser, ur.proxyPass);
 
-            httpClient.getCredentialsProvider().setCredentials(new AuthScope(ur.proxyHost, ur.proxyPort), cred);
-            HttpHost proxy = new HttpHost(ur.proxyHost, ur.proxyPort);
-            httpClient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+                httpClient.getCredentialsProvider().setCredentials(new AuthScope(ur.proxyHost, ur.proxyPort), cred);
+                HttpHost proxy = new HttpHost(ur.proxyHost, ur.proxyPort);
+                httpClient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY, proxy);
+            }
         }
 
-        HttpHost targetHost = new HttpHost("testflightapp.com");
-        HttpPost httpPost = new HttpPost("/api/builds.json");
+        HttpHost targetHost = new HttpHost(UploadRequest.apiDomain);
+        HttpPost httpPost = new HttpPost(UploadRequest.httpPost);
         FileBody fileBody = new FileBody(ur.file);
 
         MultipartEntity entity = new MultipartEntity();
