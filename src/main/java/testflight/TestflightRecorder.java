@@ -13,10 +13,14 @@ import hudson.util.CopyOnWriteList;
 import hudson.util.RunList;
 import hudson.util.Secret;
 import org.apache.commons.collections.Predicate;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.kohsuke.stapler.DataBoundConstructor;
 import hudson.model.Hudson;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.*;
 
 import net.sf.json.JSONObject;
@@ -56,10 +60,23 @@ public class TestflightRecorder extends Recorder {
         return this.buildNotes;
     }
 
+    private String buildNotesPath;
+
+    public String getBuildNotesPath() {
+        return this.buildNotesPath;
+    }
+
+
     private boolean appendChangelog;
 
     public boolean getAppendChangelog() {
         return this.appendChangelog;
+    }
+
+    private boolean combineChangelogSinceLastSuccess;
+
+    public boolean getCombineChangelogSinceLastSuccess() {
+        return this.combineChangelogSinceLastSuccess;
     }
 
     /**
@@ -124,20 +141,22 @@ public class TestflightRecorder extends Recorder {
         return this.debug;
     }
 
-    private TestflightTeam [] additionalTeams;
-    
-    public TestflightTeam [] getAdditionalTeams() {
+    private TestflightTeam[] additionalTeams;
+
+    public TestflightTeam[] getAdditionalTeams() {
         return this.additionalTeams;
     }
-    
+
     @DataBoundConstructor
-    public TestflightRecorder(String tokenPairName, Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotes, Boolean appendChangelog, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort, Boolean debug, TestflightTeam [] additionalTeams) {
+    public TestflightRecorder(String tokenPairName, Secret apiToken, Secret teamToken, Boolean notifyTeam, String buildNotesPath, String buildNotes, Boolean appendChangelog, Boolean combineChangelogSinceLastSuccess, String filePath, String dsymPath, String lists, Boolean replace, String proxyHost, String proxyUser, String proxyPass, int proxyPort, Boolean debug, TestflightTeam[] additionalTeams) {
         this.tokenPairName = tokenPairName;
         this.apiToken = apiToken;
         this.teamToken = teamToken;
         this.notifyTeam = notifyTeam;
         this.buildNotes = buildNotes;
+        this.buildNotesPath = buildNotesPath;
         this.appendChangelog = appendChangelog;
+        this.combineChangelogSinceLastSuccess = combineChangelogSinceLastSuccess;
         this.filePath = filePath;
         this.dsymPath = dsymPath;
         this.replace = replace;
@@ -163,7 +182,6 @@ public class TestflightRecorder extends Recorder {
     public boolean perform(AbstractBuild<?, ?> build, Launcher launcher, final BuildListener listener) {
         if (build.getResult().isWorseOrEqualTo(Result.FAILURE))
             return false;
-
         listener.getLogger().println(Messages.TestflightRecorder_InfoUploading());
 
         try {
@@ -173,7 +191,7 @@ public class TestflightRecorder extends Recorder {
 
             List<TestflightUploader.UploadRequest> urList = new ArrayList<TestflightUploader.UploadRequest>();
 
-            for(TestflightTeam team : createDefaultPlusAdditionalTeams()) {
+            for (TestflightTeam team : createDefaultPlusAdditionalTeams()) {
                 try {
                     TestflightUploader.UploadRequest ur = createPartialUploadRequest(team, vars, build);
                     urList.add(ur);
@@ -183,11 +201,13 @@ public class TestflightRecorder extends Recorder {
                 }
             }
 
-            for(TestflightUploader.UploadRequest ur : urList) {
+            for (TestflightUploader.UploadRequest ur : urList) {
+                List<Entry> entries = combineChangelogSinceLastSuccess ? getChangeSetEntriesSinceLastSuccess(build) : getChangeSetEntries(build);
+
                 TestflightRemoteRecorder remoteRecorder = new TestflightRemoteRecorder(workspace, ur, listener);
-    
+
                 final List<Map> parsedMaps;
-    
+
                 try {
                     Object result = launcher.getChannel().call(remoteRecorder);
                     parsedMaps = (List<Map>) result;
@@ -196,12 +216,12 @@ public class TestflightRecorder extends Recorder {
                     listener.getLogger().println(ue.getResponseBody());
                     return false;
                 }
-    
+
                 if (parsedMaps.size() == 0) {
                     listener.getLogger().println(Messages.TestflightRecorder_NoUploadedFile(ur.filePaths));
                     return false;
                 }
-                for (Map parsedMap: parsedMaps) {
+                for (Map parsedMap : parsedMaps) {
                     addTestflightLinks(build, listener, parsedMap);
                 }
             }
@@ -218,7 +238,7 @@ public class TestflightRecorder extends Recorder {
         List<TestflightTeam> allTeams = new ArrayList<TestflightTeam>();
         // first team is default
         allTeams.add(new TestflightTeam(getTokenPairName(), getFilePath(), getDsymPath()));
-        if(additionalTeams != null) {
+        if (additionalTeams != null) {
             allTeams.addAll(Arrays.asList(additionalTeams));
         }
         return allTeams;
@@ -257,7 +277,10 @@ public class TestflightRecorder extends Recorder {
         ur.filePaths = vars.expand(StringUtils.trim(team.getFilePath()));
         ur.dsymPath = vars.expand(StringUtils.trim(team.getDsymPath()));
         ur.apiToken = vars.expand(Secret.toString(tokenPair.getApiToken()));
-        ur.buildNotes = createBuildNotes(vars.expand(buildNotes), build.getChangeSet());
+        List<Entry> entries = combineChangelogSinceLastSuccess ? getChangeSetEntriesSinceLastSuccess(build) : getChangeSetEntries(build);
+        File buildNotesFile = getBuildNotesFile(vars, buildNotesPath);
+        ur.buildNotes = this.buildNotes;
+        ur.buildNotesPath = this.buildNotesPath;
         ur.lists = vars.expand(lists);
         ur.notifyTeam = notifyTeam;
         ProxyConfiguration proxy = getProxy();
@@ -268,7 +291,98 @@ public class TestflightRecorder extends Recorder {
         ur.replace = replace;
         ur.teamToken = vars.expand(Secret.toString(tokenPair.getTeamToken()));
         ur.debug = debug;
+        ur.vars = vars;
+        ur.changeLog = getChangeLog(entries);
         return ur;
+    }
+
+    private String getChangeLog(List<Entry> entries) {
+
+        String changeLog = "";
+        if(appendChangelog)
+
+        {
+            StringBuilder stringBuilder = new StringBuilder();
+
+            // Then append the changelog
+            stringBuilder.append("\n\n")
+              .append(entries.isEmpty() ? Messages.TestflightRecorder_EmptyChangeSet() : Messages.TestflightRecorder_Changelog())
+              .append("\n");
+            stringBuilder.append(changeLog);
+            int entryNumber = 1;
+
+            for (ChangeLogSet.Entry entry : entries) {
+                stringBuilder.append("\n").append(entryNumber).append(". ");
+                stringBuilder.append(entry.getMsg()).append(" \u2014 ").append(entry.getAuthor());
+
+                entryNumber++;
+            }
+            changeLog = stringBuilder.toString();
+        }
+        return changeLog;
+    }
+
+    private File getBuildNotesFile(EnvVars vars, String buildNotesPath) {
+        if(buildNotesPath != null && !buildNotesPath.isEmpty()) {
+            buildNotesPath = vars.expand(buildNotesPath);
+            File buildNotesFile = new File(buildNotesPath);
+            if(buildNotesFile.exists()) {
+                return buildNotesFile;
+            }
+            else {
+                buildNotesFile = new File(vars.expand("$WORKSPACE"), buildNotesPath);
+                if (buildNotesFile.exists()) {
+                    return buildNotesFile;
+                }
+            }
+        }
+
+        File buildNotesFile = new File(vars.expand("$WORKSPACE"),"BUILD_NOTES");
+        if (buildNotesFile.exists()) {
+            return buildNotesFile;
+        }
+
+        return null;
+    }
+
+    private List<Entry> getChangeSetEntries(AbstractBuild<?, ?> build) {
+        ArrayList<Entry> entries = new ArrayList<Entry>();
+        ChangeLogSet<?> changeSet = build.getChangeSet();
+        for (Entry entry : changeSet) {
+            entries.add(entry);
+        }
+        return entries;
+    }
+
+    private List<Entry> getChangeSetEntriesSinceLastSuccess(AbstractBuild<?, ?> build) {
+        ArrayList<Entry> entries = new ArrayList<Entry>();
+
+        //The next build after the last successful one should either be a failure, or the current build.
+        //It could be in progress I guess, but we should probably just append the changelog anyway.
+        AbstractBuild<?, ?> lastBuild = build.getPreviousSuccessfulBuild();
+        if(lastBuild != null) {
+            lastBuild = lastBuild.getNextBuild();
+        }
+        else {
+            return getChangeSetEntries(build);
+        }
+
+        while(lastBuild != null) {
+
+            ChangeLogSet<?> changeSet = lastBuild.getChangeSet();
+            if(changeSet != null) {
+                for (Entry entry : changeSet) {
+                    entries.add(entry);
+                }
+            }
+
+            if(lastBuild.equals(build))
+                break;
+
+            lastBuild = lastBuild.getNextBuild();
+        }
+
+        return entries;
     }
 
     private ProxyConfiguration getProxy() {
@@ -285,16 +399,25 @@ public class TestflightRecorder extends Recorder {
     }
 
     // Append the changelog if we should and can
-    private String createBuildNotes(String buildNotes, final ChangeLogSet<?> changeSet) {
+    private String createBuildNotes(File buildNotesFile, String buildNotes, final List<Entry> changeSet) {
+        if(buildNotesFile != null) {
+            try {
+                String fileContents = FileUtils.readFileToString(buildNotesFile, "UTF-8");
+                buildNotes = fileContents + "\n\n" + buildNotes;
+            } catch (FileNotFoundException e) {
+                //the file should have been checked if it exists, but if not, just ignore it.
+            } catch (IOException e) {
+                //ignore it
+            }
+        }
+
+
         if (appendChangelog) {
             StringBuilder stringBuilder = new StringBuilder();
 
-            // Show the build notes first
-            stringBuilder.append(buildNotes);
-
             // Then append the changelog
             stringBuilder.append("\n\n")
-                    .append(changeSet.isEmptySet() ? Messages.TestflightRecorder_EmptyChangeSet() : Messages.TestflightRecorder_Changelog())
+                    .append(changeSet.isEmpty() ? Messages.TestflightRecorder_EmptyChangeSet() : Messages.TestflightRecorder_Changelog())
                     .append("\n");
 
             int entryNumber = 1;

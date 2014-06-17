@@ -1,5 +1,6 @@
 package testflight;
 
+import hudson.EnvVars;
 import hudson.model.BuildListener;
 import hudson.remoting.Callable;
 import hudson.Util;
@@ -14,9 +15,11 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
+import hudson.scm.ChangeLogSet;
 import org.apache.commons.lang.StringUtils;
 import org.apache.tools.ant.types.FileSet;
 import org.apache.commons.io.FilenameUtils;
+
 
 /**
  * Code for sending a build to TestFlight which can run on a master or slave.

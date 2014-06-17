@@ -46,7 +46,10 @@
        </f:entry> 
       </table>
     </f:repeatable>
-  </f:entry>      
+  </f:entry>
+  <f:entry title="Build Notes Path" field="buildNotesPath">
+          <f:textbox />
+  </f:entry>
   <f:entry title="Build Notes" field="buildNotes">
     <f:textarea />
   </f:entry>
@@ -54,6 +57,9 @@
     <f:checkbox />
   </f:entry>
   <f:advanced>
+    <f:entry title="Combine all changelogs in builds since the last successful one for the build notes. This will not actually append them." field="combineChangelogSinceLastSuccess">
+      <f:checkbox />
+    </f:entry>
     <f:entry title="Distribution Lists" field="lists">
         <f:textbox />
     </f:entry>
